@@ -114,3 +114,18 @@ publishes it to `ghcr.io/ricardo-duarte-av/redgifs-api`:
 - push to `main` → `latest` and `sha-<commit>`
 - tag `vX.Y.Z` → `X.Y.Z` and `X.Y`
 - pull requests → build only, nothing is pushed
+
+## Daily health check
+
+`.github/workflows/healthcheck.yml` runs `scripts/healthcheck.py` against a deployed instance
+every day (06:17 UTC) and on manual dispatch. If any check fails, it opens an issue labelled
+`healthcheck`, or comments on the one already open. When checks pass again, it closes the issue.
+
+Configuration (repository settings → Secrets and variables → Actions):
+
+- secret `INSTANCE_URL`: base URL of the instance. It is only read from the secret, and the script
+  scrubs it (and its hostname) from the report, so it never appears in logs or issues.
+- variable `HEALTHCHECK_USER` (optional): redgifs user whose feed is used for the checks
+  (default `susanna`).
+
+Run it locally with `BASE_URL=https://your-instance python3 scripts/healthcheck.py`.

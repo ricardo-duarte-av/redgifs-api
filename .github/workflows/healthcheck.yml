@@ -1,0 +1,72 @@
+name: Instance health check
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: healthcheck
+
+env:
+  ISSUE_LABEL: healthcheck
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Run checks
+        id: checks
+        continue-on-error: true
+        env:
+          # The instance URL only ever comes from this secret; the script scrubs it from its output.
+          BASE_URL: ${{ secrets.INSTANCE_URL }}
+          TEST_USER: ${{ vars.HEALTHCHECK_USER || 'susanna' }}
+        run: |
+          python3 scripts/healthcheck.py report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open or update failure issue
+        if: steps.checks.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create "$ISSUE_LABEL" --color D93F0B --description "Automated instance health check" --force
+          {
+            echo "The scheduled health check of the deployed instance failed."
+            echo
+            if [ -s report.md ]; then cat report.md; else echo "The check script did not produce a report (is the \`INSTANCE_URL\` secret set?)."; fi
+            echo
+            echo "Run: $RUN_URL"
+          } > body.md
+          existing=$(gh issue list --label "$ISSUE_LABEL" --state open --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file body.md
+          else
+            gh issue create --title "Instance health check failing" --label "$ISSUE_LABEL" --body-file body.md
+          fi
+
+      - name: Close resolved issue
+        if: steps.checks.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          for n in $(gh issue list --label "$ISSUE_LABEL" --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "Health check passing again: $RUN_URL"
+          done
+
+      - name: Fail the run if checks failed
+        if: steps.checks.outcome == 'failure'
+        run: exit 1
