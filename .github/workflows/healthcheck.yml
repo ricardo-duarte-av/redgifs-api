@@ -32,6 +32,7 @@ jobs:
           # The instance URL only ever comes from this secret; the script scrubs it from its output.
           BASE_URL: ${{ secrets.INSTANCE_URL }}
           TEST_USER: ${{ vars.HEALTHCHECK_USER || 'susanna' }}
+          TEST_NICHE: ${{ vars.HEALTHCHECK_NICHE || 'just-boobs' }}
         run: |
           python3 scripts/healthcheck.py report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"

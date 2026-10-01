@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import re
@@ -9,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from starlette.background import BackgroundTask
 
-from .redgifs import RedgifsClient, UpstreamError, parse_gif_id
+from .redgifs import RedgifsClient, UpstreamError, parse_gif_id, parse_niche_id
 
 USER_AGENT = os.getenv(
     "REDGIFS_USER_AGENT",
@@ -22,6 +23,8 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 
 UserOrder = Literal["latest", "oldest", "trending", "top", "top7", "top28"]
 SearchOrder = Literal["trending", "latest", "score", "top", "top7", "top28"]
+# "top" is what the website uses in niche URLs; upstream treats it as "best".
+NicheOrder = Literal["top", "best", "hot", "latest", "oldest"]
 Quality = Literal["hd", "sd", "silent"]
 
 # Fallback order when the requested variant is missing for a gif.
@@ -89,6 +92,20 @@ def trim_user(u: dict) -> dict:
     }
 
 
+def trim_niche(n: dict) -> dict:
+    return {
+        "id": n.get("id"),
+        "name": n.get("name"),
+        "url": f"https://www.redgifs.com/niches/{n.get('id')}",
+        "description": n.get("description"),
+        "gifs": n.get("gifs"),
+        "subscribers": n.get("subscribers"),
+        "tags": n.get("tags") or [],
+        "thumbnail": n.get("thumbnail"),
+        "cover": n.get("cover"),
+    }
+
+
 def page_response(data: dict, page: int, user: dict | None = None) -> dict:
     gifs = data.get("gifs") or []
     resp = {
@@ -129,6 +146,48 @@ async def user_feed(
     users = data.get("users") or []
     user = next((u for u in users if (u.get("name") or "").lower() == username.lower()), None)
     return page_response(data, page, trim_user(user) if user else {"name": username})
+
+
+@app.get("/niches")
+async def niches(
+    request: Request,
+    q: str | None = Query(None, description="Search niches by name; omit to list all niches"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """List or search niches, to find the id used by /niches/{id}."""
+    data = await request.app.state.redgifs.niches(q, page, limit)
+    return {
+        "page": data.get("page", page),
+        "pages": data.get("pages"),
+        "total": data.get("total"),
+        "niches": [trim_niche(n) for n in data.get("niches") or []],
+    }
+
+
+@app.get("/niches/{ref:path}")
+async def niche_feed(
+    request: Request,
+    ref: str,
+    order: NicheOrder = "top",
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    related: bool = Query(True, description="Include related niches"),
+):
+    """A niche's info and one page of its gifs. `ref` may be a niche id or a redgifs.com/niches/... URL."""
+    niche_id = parse_niche_id(ref)
+    if not niche_id:
+        raise HTTPException(400, "Not a redgifs niche id or URL")
+    client: RedgifsClient = request.app.state.redgifs
+    calls = [client.niche(niche_id), client.niche_gifs(niche_id, order, page, limit)]
+    if related:
+        calls.append(client.niche_related(niche_id))
+    info, data, *rest = await asyncio.gather(*calls)
+    resp = page_response(data, page)
+    resp = {"niche": trim_niche(info), **resp}
+    if related:
+        resp["related"] = [trim_niche(n) for n in rest[0]]
+    return resp
 
 
 @app.get("/search")

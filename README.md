@@ -62,6 +62,42 @@ curl 'http://localhost:8080/users/susanna?limit=5'
 
 Unknown users return `404` with `{"error": {"code": "UserNotFound", ...}}`.
 
+### `GET /niches/{ref}`
+
+A niche's info, one page of its gifs, and related niches. `ref` can be a niche id (`anal-sex`)
+or a site URL (`https://www.redgifs.com/niches/anal-sex`).
+
+| Param | Default | Values |
+|---|---|---|
+| `order` | `top` | `top` (same as `best`), `best`, `hot`, `latest`, `oldest` |
+| `page` | `1` | 1-based page number |
+| `limit` | `20` | 1–100 |
+| `related` | `true` | Include up to 10 related niches |
+
+```sh
+curl 'http://localhost:8080/niches/anal-sex?order=top&limit=5'
+```
+
+```json
+{
+  "niche": {"id": "anal-sex", "name": "Anal Sex", "url": "...", "description": "...", "gifs": 230353, "subscribers": 325370, "tags": ["..."], "thumbnail": "...", "cover": "..."},
+  "page": 1, "pages": 46344, "total": 231717,
+  "gifs": [{"id": "...", "urls": {"hd": "...", "sd": "..."}, "...": "..."}],
+  "related": [{"id": "rough-sex", "name": "Rough Sex", "...": "..."}]
+}
+```
+
+Unknown niches return `404` with `{"error": {"code": "NicheNotFound", ...}}`.
+
+### `GET /niches`
+
+List all niches, or search them by name with `q`. Use it to find niche ids.
+
+| Param | Default | Description |
+|---|---|---|
+| `q` | | Search text; omit to list all niches by popularity |
+| `page`, `limit` | `1`, `20` | `limit` is 1–100 |
+
 ### `GET /gif/{ref}`
 
 Metadata and media URLs for one gif. `ref` can be a gif id or any redgifs URL
@@ -127,5 +163,6 @@ Configuration (repository settings → Secrets and variables → Actions):
   scrubs it (and its hostname) from the report, so it never appears in logs or issues.
 - variable `HEALTHCHECK_USER` (optional): redgifs user whose feed is used for the checks
   (default `susanna`).
+- variable `HEALTHCHECK_NICHE` (optional): niche used for the checks (default `just-boobs`).
 
 Run it locally with `BASE_URL=https://your-instance python3 scripts/healthcheck.py`.

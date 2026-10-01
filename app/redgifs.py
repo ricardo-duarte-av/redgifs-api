@@ -20,6 +20,19 @@ _MEDIA_ID = re.compile(r"media\.redgifs\.com/([A-Za-z]+)")
 _BARE_ID = re.compile(r"^[A-Za-z]+$")
 
 
+_NICHE_URL = re.compile(r"redgifs\.com/niches/([A-Za-z0-9-]+)")
+_BARE_NICHE = re.compile(r"^[A-Za-z0-9-]+$")
+
+
+def parse_niche_id(ref: str) -> str | None:
+    """Accept a bare niche id or a redgifs.com/niches/<id> URL; return the lowercase id."""
+    ref = ref.strip()
+    if _BARE_NICHE.match(ref):
+        return ref.lower()
+    m = _NICHE_URL.search(ref)
+    return m.group(1).lower() if m else None
+
+
 def parse_gif_id(ref: str) -> str | None:
     """Accept a bare gif id or any redgifs watch/embed/media URL; return the lowercase id."""
     ref = ref.strip()
@@ -105,6 +118,23 @@ class RedgifsClient:
             f"/v2/users/{username}/search",
             {"order": order, "page": page, "count": count},
         )
+
+    async def niche(self, niche_id: str) -> dict:
+        return (await self.get(f"/v2/niches/{niche_id}"))["niche"]
+
+    async def niche_gifs(self, niche_id: str, order: str, page: int, count: int) -> dict:
+        return await self.get(
+            f"/v2/niches/{niche_id}/gifs",
+            {"order": order, "page": page, "count": count},
+        )
+
+    async def niche_related(self, niche_id: str) -> list[dict]:
+        return (await self.get(f"/v2/niches/{niche_id}/related")).get("niches") or []
+
+    async def niches(self, query: str | None, page: int, count: int) -> dict:
+        if query:
+            return await self.get("/v2/niches/search", {"query": query, "page": page, "count": count})
+        return await self.get("/v2/niches", {"page": page, "count": count})
 
     async def search(self, text: str | None, tags: str | None, order: str, page: int, count: int) -> dict:
         params: dict = {"order": order, "page": page, "count": count}

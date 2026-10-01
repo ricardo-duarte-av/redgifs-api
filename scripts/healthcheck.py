@@ -17,6 +17,7 @@ import urllib.request
 
 BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
 TEST_USER = os.environ.get("TEST_USER", "susanna")
+TEST_NICHE = os.environ.get("TEST_NICHE", "just-boobs")
 TIMEOUT = 30
 
 
@@ -114,6 +115,27 @@ class Checks:
         assert len(body) == 1024, f"got {len(body)} bytes"
         assert body[4:8] == b"ftyp", "response is not an mp4"
 
+    def niche_feed(self):
+        d = get_json(f"/niches/{TEST_NICHE}?limit=5")
+        assert d["niche"]["id"] == TEST_NICHE, f"wrong niche {d['niche']}"
+        assert d["gifs"], "niche feed returned no gifs"
+        assert d["related"], "no related niches"
+        return f"{len(d['gifs'])} gifs, {len(d['related'])} related"
+
+    def niche_by_url(self):
+        d = get_json(f"/niches/https://www.redgifs.com/niches/{TEST_NICHE}?order=latest&page=2&limit=5&related=false")
+        assert d["niche"]["id"] == TEST_NICHE and d["page"] == 2 and d["gifs"], "unexpected response"
+        assert "related" not in d, "related niches included despite related=false"
+
+    def unknown_niche(self):
+        d = get_json("/niches/zzzz-no-such-niche-healthcheck", expect=404)
+        assert d["error"]["code"] == "NicheNotFound", f"unexpected error {d}"
+
+    def niche_search(self):
+        d = get_json(f"/niches?q={TEST_NICHE.split('-')[0]}&limit=10")
+        assert d["niches"], "niche search returned nothing"
+        return f"{d['total']} matches"
+
     def search(self):
         d = get_json("/search?tags=Amateur&order=latest&limit=10")
         assert d["gifs"], "search returned no gifs"
@@ -135,6 +157,10 @@ def main() -> int:
         ("gif by URL", c.gif_by_url),
         ("download redirect", c.download_redirect),
         ("download proxy (range)", c.download_proxy),
+        ("niche feed", c.niche_feed),
+        ("niche by URL, paging", c.niche_by_url),
+        ("unknown niche 404", c.unknown_niche),
+        ("niche search", c.niche_search),
         ("search", c.search),
     ]:
         c.run(name, fn)
