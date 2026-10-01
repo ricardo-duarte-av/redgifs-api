@@ -1,0 +1,15 @@
+services:
+  redgifs-api:
+    image: ghcr.io/ricardo-duarte-av/redgifs-api:latest
+    # Uncomment to build locally instead of pulling the published image.
+    # build: .
+    container_name: redgifs-api
+    restart: unless-stopped
+    ports:
+      - "8080:8000"
+    environment:
+      # The redgifs token is bound to this User-Agent; any browser-like string works.
+      # REDGIFS_USER_AGENT: "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"
+      # Set to false to disable /download?proxy=true (redirect-only, no video traffic through this service).
+      ALLOW_PROXY: "true"
+      LOG_LEVEL: "info"
